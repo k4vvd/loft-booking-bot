@@ -1,62 +1,46 @@
-import aiosqlite
+import asyncpg
+import os
 
-DB_NAME = "loft.db"
-db_connection = None  # глобальное соединение
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ----------------------
-# Инициализация базы данных
-# ----------------------
 async def init_db():
-    global db_connection
-    db_connection = await aiosqlite.connect(DB_NAME)
-    await db_connection.execute("""
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
             name TEXT,
             phone TEXT,
             date TEXT,
             time TEXT,
-            hours INTEGER,
+            hours INT,
             status TEXT DEFAULT 'new',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    await db_connection.commit()
+    await conn.close()
 
-# ----------------------
-# Конвертация времени "HH:MM" в минуты
-# ----------------------
-def time_to_minutes(time_str):
-    h, m = map(int, time_str.split(":"))
-    return h * 60 + m
 
-# ----------------------
-# Проверка пересечения брони
-# ----------------------
-async def check_overlap(date: str, time: str, hours: int) -> bool:
-    new_start = time_to_minutes(time)
-    new_end = new_start + hours * 60
-
-    async with db_connection.execute("SELECT time, hours FROM bookings WHERE date=?", (date,)) as cursor:
-        rows = await cursor.fetchall()
-        for existing_time, existing_hours in rows:
-            exist_start = time_to_minutes(existing_time)
-            exist_end = exist_start + existing_hours * 60
-            if new_start < exist_end and new_end > exist_start:
-                return True
-    return False
-
-# ----------------------
-# Добавление брони
-# ----------------------
 async def add_booking(user_id, name, phone, date, time, hours):
-    # Проверка пересечения ещё раз на всякий случай
-    if await check_overlap(date, time, hours):
-        return None
-    async with db_connection.execute(
-        "INSERT INTO bookings (user_id, name, phone, date, time, hours) VALUES (?, ?, ?, ?, ?, ?)",
-        (user_id, name, phone, date, time, hours)
-    ) as cursor:
-        await db_connection.commit()
-        return cursor.lastrowid
+    conn = await asyncpg.connect(DATABASE_URL)
+
+    # Проверка пересечений
+    new_start = int(time.split(":")[0])*60 + int(time.split(":")[1])
+    new_end = new_start + hours*60
+
+    rows = await conn.fetch("SELECT time, hours FROM bookings WHERE date=$1", date)
+    for r in rows:
+        exist_start = int(r['time'].split(":")[0])*60 + int(r['time'].split(":")[1])
+        exist_end = exist_start + r['hours']*60
+        if new_start < exist_end and new_end > exist_start:
+            await conn.close()
+            return None
+
+    # Добавляем бронь
+    booking_id = await conn.fetchval(
+        "INSERT INTO bookings(user_id, name, phone, date, time, hours) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",
+        user_id, name, phone, date, time, hours
+    )
+
+    await conn.close()
+    return booking_id
