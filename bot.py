@@ -1,121 +1,106 @@
-import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
-from database import init_db, add_booking
-
-from database import init_db, add_booking, check_overlap
-
 BOT_TOKEN = "8682934608:AAF2UOPlVaUvep-NZowbgbS9k90NXcw0JzY"
 ADMIN_ID = 784623145
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from database import init_db, add_booking
 
-# FSM состояния
-class BookingState(StatesGroup):
+BOT_TOKEN = "8682934608:AAF2UOPlVaUvep-NZowbgbS9k90NXcw0JzY"  # сюда свой токен
+ADMIN_ID = 784623145   # сюда свой ID
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+# --- FSM ---
+class BookingStates(StatesGroup):
     name = State()
     phone = State()
     date = State()
     time = State()
     hours = State()
 
-# /start
+# --- Старт ---
 @dp.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Добро пожаловать! Введите ваше имя:")
-    await state.set_state(BookingState.name)
+    await state.clear()  # сброс предыдущих данных
+    await message.answer(
+        "Добро пожаловать!\nВведите ваше имя:"
+    )
+    await state.set_state(BookingStates.name)
 
-# имя
-@dp.message(BookingState.name)
+# --- FSM хэндлеры ---
+@dp.message(BookingStates.name)
 async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
-    await message.answer("Введите телефон:")
-    await state.set_state(BookingState.phone)
+    await state.update_data(name=message.text)
+    await message.answer("Введите ваш телефон:")
+    await state.set_state(BookingStates.phone)
 
-# телефон
-@dp.message(BookingState.phone)
+@dp.message(BookingStates.phone)
 async def process_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text.strip())
-    await message.answer("Введите дату (например, 20.04):")
-    await state.set_state(BookingState.date)
+    await state.update_data(phone=message.text)
+    await message.answer("Введите дату брони (например 20.04):")
+    await state.set_state(BookingStates.date)
 
-# дата
-@dp.message(BookingState.date)
+@dp.message(BookingStates.date)
 async def process_date(message: types.Message, state: FSMContext):
-    await state.update_data(date=message.text.strip())
-    await message.answer("Введите время (например, 18:00):")
-    await state.set_state(BookingState.time)
+    await state.update_data(date=message.text)
+    await message.answer("Введите время брони (например 18:00):")
+    await state.set_state(BookingStates.time)
 
-# время
-@dp.message(BookingState.time)
+@dp.message(BookingStates.time)
 async def process_time(message: types.Message, state: FSMContext):
-    await state.update_data(time=message.text.strip())
-    await message.answer("Введите количество часов (только число):")
-    await state.set_state(BookingState.hours)
+    await state.update_data(time=message.text)
+    await message.answer("Введите количество часов (например 3):")
+    await state.set_state(BookingStates.hours)
 
-# часы
-@dp.message(BookingState.hours)
+@dp.message(BookingStates.hours)
 async def process_hours(message: types.Message, state: FSMContext):
-    # проверка числа
     try:
-        hours = int(message.text.strip())
-    except:
-        await message.answer("Неправильный формат. Введите число часов (например: 3).")
-        return
+        hours = int(message.text)
+        data = await state.get_data()
+        name = data["name"]
+        phone = data["phone"]
+        date = data["date"]
+        time = data["time"]
 
-    await state.update_data(hours=hours)
-    data = await state.get_data()
-
-    # проверка пересечения
-    overlap = await check_overlap(data["date"], data["time"], hours)
-    if overlap:
-        # переводим FSM в состояние выбора другой даты
-        await state.set_state(BookingState.date)
-
-        # кнопка
-        keyboard = InlineKeyboardMarkup()
-        keyboard.add(InlineKeyboardButton("Выбрать другую дату", callback_data="choose_date"))
-
-        await message.answer(
-            "Извините, выбранное время занято.",
-            reply_markup=keyboard
+        booking_id = await add_booking(
+            message.from_user.id, name, phone, date, time, hours
         )
-        return
 
-    # добавление брони
-    booking_id = await add_booking(
-        message.from_user.id,
-        data["name"],
-        data["phone"],
-        data["date"],
-        data["time"],
-        hours
-    )
+        if booking_id:
+            await message.answer("Бронь успешно создана!")
+            await bot.send_message(
+                ADMIN_ID,
+                f"Новая бронь!\nID: {booking_id}\nИмя: {name}\nТелефон: {phone}\nДата: {date}\nВремя: {time}\nЧасы: {hours}"
+            )
+        else:
+            # если пересечение есть, показываем кнопку
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="Выбрать другую дату", callback_data="new_date")]
+                ]
+            )
+            await message.answer("Время занято!", reply_markup=kb)
 
-    await message.answer("Бронь создана! Администратор уведомлён.")
-    await bot.send_message(
-        ADMIN_ID,
-        f"Новая бронь!\nID: {booking_id}\nИмя: {data['name']}\nТелефон: {data['phone']}\nДата: {data['date']}\nВремя: {data['time']}\nЧасы: {hours}"
-    )
-    await state.clear()
+        await state.clear()
+    except ValueError:
+        await message.answer("Неправильный формат. Введите только число часов.")
 
-# обработчик кнопки
-@dp.callback_query(lambda c: c.data == "choose_date")
-async def choose_date_callback(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Введите новую дату (например, 20.04):")
-    await state.set_state(BookingState.date)
-    await callback.answer()  # убираем часики на кнопке
+# --- Callback кнопки ---
+@dp.callback_query(lambda c: c.data == "new_date")
+async def choose_new_date(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите новую дату (например 21.04):")
+    await state.set_state(BookingStates.date)
+    await callback.answer()
 
-# запуск
+# --- Main ---
 async def main():
-    await init_db()
-    print("Бот запущен! Отправьте /start в Telegram")
+    await init_db()  # инициализация базы
+    print("Бот запущен!")
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())
