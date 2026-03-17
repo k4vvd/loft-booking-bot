@@ -2,7 +2,7 @@ import os
 import asyncpg
 from datetime import datetime
 
-DATABASE_URL = os.getenv("postgresql://postgres:[38N.f9612312]@db.ctmomcrdvrtyhzslxnih.supabase.co:5432/postgres")  # PostgreSQL URL
+DATABASE_URL = os.getenv("postgresql://postgres:38N.f9612312@db.ctmomcrdvrtyhzslxnih.supabase.co:5432/postgres")  # PostgreSQL URL
 
 # Конвертируем время "HH:MM" в минуты
 def time_to_minutes(time_str):
