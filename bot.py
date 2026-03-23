@@ -170,7 +170,7 @@ async def process_name(message: types.Message, state: FSMContext):
         return
     await state.update_data(name=name)
     await message.answer(
-        "Введите ваш *телефон*\n"
+        "Введите ваш *телефон*\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.phone)
