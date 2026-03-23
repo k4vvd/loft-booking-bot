@@ -1,4 +1,6 @@
 import asyncio
+import re
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -22,6 +24,93 @@ class BookingState(StatesGroup):
     time = State()
     hours = State()
 
+# ----- Функции валидации -----
+def validate_name(name: str) -> bool:
+    """Проверка имени: минимум 2 символа, только буквы, пробелы и дефисы"""
+    if len(name) < 2:
+        return False
+    # Разрешаем буквы (русские и английские), пробелы, дефисы
+    pattern = r'^[a-zA-Zа-яА-ЯёЁ\s\-]+$'
+    return bool(re.match(pattern, name.strip()))
+
+def validate_phone(phone: str) -> bool:
+    """Проверка российского номера телефона"""
+    # Удаляем все нецифровые символы
+    digits = re.sub(r'\D', '', phone)
+    
+    # Проверяем длину (должно быть 11 цифр для российского номера)
+    if len(digits) != 11:
+        return False
+    
+    # Проверяем, что номер начинается с 7 или 8
+    if digits[0] not in ['7', '8']:
+        return False
+    
+    return True
+
+def format_phone(phone: str) -> str:
+    """Форматирует телефон для красивого отображения"""
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) == 11:
+        if digits[0] == '8':
+            digits = '7' + digits[1:]
+        return f"+{digits[0]} ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
+    return phone
+
+def validate_date(date_str: str) -> bool:
+    """Проверка формата даты (DD.MM)"""
+    pattern = r'^\d{2}\.\d{2}$'
+    if not re.match(pattern, date_str):
+        return False
+    
+    try:
+        day, month = map(int, date_str.split('.'))
+        # Проверяем, что день и месяц в допустимых пределах
+        if month < 1 or month > 12:
+            return False
+        if day < 1 or day > 31:
+            return False
+        
+        # Проверяем, что дата не в прошлом
+        current_date = datetime.now()
+        current_year = current_date.year
+        input_date = datetime(current_year, month, day)
+        
+        # Если дата уже прошла в этом году, предлагаем следующий год
+        if input_date.date() < current_date.date():
+            # Можно разрешить, но добавить предупреждение
+            return True
+            
+        return True
+    except ValueError:
+        return False
+
+def validate_time(time_str: str) -> bool:
+    """Проверка формата времени (HH:MM)"""
+    pattern = r'^\d{2}:\d{2}$'
+    if not re.match(pattern, time_str):
+        return False
+    
+    try:
+        hours, minutes = map(int, time_str.split(':'))
+        if hours < 0 or hours > 23:
+            return False
+        if minutes < 0 or minutes > 59:
+            return False
+        return True
+    except ValueError:
+        return False
+
+def validate_hours(hours_str: str) -> bool:
+    """Проверка количества часов"""
+    try:
+        hours = int(hours_str)
+        if hours < 1 or hours > 12:  # Максимум 12 часов
+            return False
+        return True
+    except ValueError:
+        return False
+
 # ----- Клавиатуры -----
 def get_main_keyboard():
     """Главное меню (reply-кнопки)"""
@@ -41,6 +130,15 @@ def get_date_keyboard():
     )
     return keyboard
 
+def get_cancel_keyboard():
+    """Кнопка отмены бронирования"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить бронирование", callback_data="cancel_booking")]
+        ]
+    )
+    return keyboard
+
 # ----- Старт и основное меню -----
 @dp.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
@@ -52,7 +150,12 @@ async def start(message: types.Message, state: FSMContext):
 
 @dp.message(lambda message: message.text == "📅 Забронировать")
 async def start_booking(message: types.Message, state: FSMContext):
-    await message.answer("Введите ваше имя:", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "Введите ваше имя:\n"
+        "*(минимум 2 символа, только буквы, пробелы и дефисы)*",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="Markdown"
+    )
     await state.set_state(BookingState.name)
 
 @dp.message(lambda message: message.text == "📋 Мои брони")
@@ -63,96 +166,244 @@ async def my_bookings(message: types.Message):
 @dp.message(lambda message: message.text == "❓ Помощь")
 async def help_message(message: types.Message):
     await message.answer(
-        "Этот бот помогает бронировать лофт.\n"
-        "Используйте /start для главного меню.\n"
-        "По всем вопросам обращайтесь к администратору."
+        "📖 *Помощь по боту*\n\n"
+        "📅 *Забронировать* - создать новую бронь\n"
+        "📋 *Мои брони* - просмотр ваших броней\n\n"
+        "*Правила ввода:*\n"
+        "• Имя: только буквы, от 2 символов\n"
+        "• Телефон: российский номер (11 цифр)\n"
+        "• Дата: формат ДД.ММ (например, 25.12)\n"
+        "• Время: формат ЧЧ:ММ (например, 18:00)\n"
+        "• Часы: число от 1 до 12\n\n"
+        "По всем вопросам: @administrator",
+        parse_mode="Markdown"
     )
 
 # ----- Процесс бронирования -----
 @dp.message(BookingState.name)
 async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
-    await message.answer("Введите телефон:")
+    name = message.text.strip()
+    
+    if not validate_name(name):
+        await message.answer(
+            "❌ *Некорректное имя*\n"
+            "Имя должно содержать только буквы, пробелы и дефисы, "
+            "минимум 2 символа.\n\n"
+            "Пожалуйста, введите имя еще раз:",
+            parse_mode="Markdown"
+        )
+        return
+    
+    await state.update_data(name=name)
+    await message.answer(
+        "Введите ваш *телефон* (российский номер):\n"
+        "Примеры: +7 999 123-45-67, 89991234567, +79991234567",
+        parse_mode="Markdown"
+    )
     await state.set_state(BookingState.phone)
 
 @dp.message(BookingState.phone)
 async def process_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text.strip())
-    await message.answer("Введите дату (например, 20.04):")
+    phone = message.text.strip()
+    
+    if not validate_phone(phone):
+        await message.answer(
+            "❌ *Некорректный номер телефона*\n"
+            "Пожалуйста, введите российский номер телефона "
+            "(11 цифр, начинается с 7 или 8).\n\n"
+            "Примеры: +7 999 123-45-67, 89991234567, +79991234567",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Сохраняем отформатированный номер для красоты
+    formatted_phone = format_phone(phone)
+    await state.update_data(phone=formatted_phone)
+    
+    await message.answer(
+        "Введите *дату* (например, 25.12):\n"
+        "Формат: ДД.ММ",
+        parse_mode="Markdown"
+    )
     await state.set_state(BookingState.date)
 
 @dp.message(BookingState.date)
 async def process_date(message: types.Message, state: FSMContext):
-    await state.update_data(date=message.text.strip())
-    await message.answer("Введите время (например, 18:00):")
+    date_str = message.text.strip()
+    
+    if not validate_date(date_str):
+        await message.answer(
+            "❌ *Некорректная дата*\n"
+            "Пожалуйста, введите дату в формате ДД.ММ\n"
+            "Пример: 25.12 (25 декабря)\n\n"
+            "Введите дату еще раз:",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Проверяем, не прошла ли дата
+    current_date = datetime.now()
+    current_year = current_date.year
+    day, month = map(int, date_str.split('.'))
+    input_date = datetime(current_year, month, day)
+    
+    if input_date.date() < current_date.date():
+        await message.answer(
+            "⚠️ *Внимание!*\n"
+            f"Дата {date_str} уже прошла в этом году.\n"
+            "Если вы хотите забронировать на следующий год, "
+            "пожалуйста, укажите год (например, 25.12.2025)\n\n"
+            "Или введите другую дату:",
+            parse_mode="Markdown"
+        )
+        return
+    
+    await state.update_data(date=date_str)
+    await message.answer(
+        "Введите *время* (например, 18:00):\n"
+        "Формат: ЧЧ:ММ (от 00:00 до 23:59)",
+        parse_mode="Markdown"
+    )
     await state.set_state(BookingState.time)
 
 @dp.message(BookingState.time)
 async def process_time(message: types.Message, state: FSMContext):
-    await state.update_data(time=message.text.strip())
-    await message.answer("Введите количество часов (только число):")
+    time_str = message.text.strip()
+    
+    if not validate_time(time_str):
+        await message.answer(
+            "❌ *Некорректное время*\n"
+            "Пожалуйста, введите время в формате ЧЧ:ММ\n"
+            "Примеры: 18:00, 09:30, 14:15\n\n"
+            "Введите время еще раз:",
+            parse_mode="Markdown"
+        )
+        return
+    
+    await state.update_data(time=time_str)
+    await message.answer(
+        "Введите *количество часов* (от 1 до 12):\n"
+        "Только число",
+        parse_mode="Markdown"
+    )
     await state.set_state(BookingState.hours)
 
 @dp.message(BookingState.hours)
 async def process_hours(message: types.Message, state: FSMContext):
-    try:
-        hours = int(message.text.strip())
-    except ValueError:
-        await message.answer("❌ Неправильный формат. Введите число часов (например: 3).")
-        return
-
-    await state.update_data(hours=hours)
-    data = await state.get_data()
-
-    overlap = await check_overlap(data["date"], data["time"], hours)
-    if overlap:
-        await state.set_state(BookingState.date)
+    hours_str = message.text.strip()
+    
+    if not validate_hours(hours_str):
         await message.answer(
-            "❌ Извините, выбранное время занято.\n"
-            "Нажмите кнопку ниже, чтобы выбрать другую дату:",
-            reply_markup=get_date_keyboard()
+            "❌ *Некорректное количество часов*\n"
+            "Пожалуйста, введите число от 1 до 12.\n\n"
+            "Введите количество часов еще раз:",
+            parse_mode="Markdown"
         )
         return
+    
+    hours = int(hours_str)
+    await state.update_data(hours=hours)
+    data = await state.get_data()
+    
+    # Показываем пользователю предварительную информацию
+    confirm_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_booking"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_booking")
+            ]
+        ]
+    )
+    
+    await message.answer(
+        f"📋 *Проверьте данные бронирования:*\n\n"
+        f"👤 Имя: {data['name']}\n"
+        f"📞 Телефон: {data['phone']}\n"
+        f"📅 Дата: {data['date']}\n"
+        f"⏰ Время: {data['time']}\n"
+        f"⏱ Часов: {hours}\n\n"
+        f"Всё верно?",
+        parse_mode="Markdown",
+        reply_markup=confirm_keyboard
+    )
 
+# ----- Обработчики инлайн-кнопок -----
+@dp.callback_query(lambda c: c.data == "choose_date")
+async def choose_date_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "Введите новую *дату* (например, 20.04):",
+        parse_mode="Markdown"
+    )
+    await state.set_state(BookingState.date)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "confirm_booking")
+async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    
+    # Проверяем пересечение еще раз на случай, если пока пользователь подтверждал, время освободилось
+    overlap = await check_overlap(data["date"], data["time"], data["hours"])
+    if overlap:
+        await callback.message.answer(
+            "❌ *Извините, выбранное время занято*\n"
+            "Пожалуйста, выберите другую дату или время.",
+            parse_mode="Markdown"
+        )
+        await state.set_state(BookingState.date)
+        await callback.answer()
+        return
+    
     booking_id = await add_booking(
-        message.from_user.id,
+        callback.from_user.id,
         data["name"],
         data["phone"],
         data["date"],
         data["time"],
-        hours
+        data["hours"]
     )
-
+    
     if booking_id:
-        await message.answer(
-            "✅ Бронь успешно создана!\n"
+        await callback.message.answer(
+            "✅ *Бронь успешно создана!*\n\n"
             f"📅 Дата: {data['date']}\n"
             f"⏰ Время: {data['time']}\n"
-            f"⏱ Часов: {hours}\n\n"
+            f"⏱ Часов: {data['hours']}\n\n"
             "Администратор уведомлён.",
+            parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
+        
         await bot.send_message(
             ADMIN_ID,
-            f"🔔 **Новая бронь!**\n"
+            f"🔔 *Новая бронь!*\n"
             f"ID: {booking_id}\n"
             f"👤 Имя: {data['name']}\n"
             f"📞 Телефон: {data['phone']}\n"
             f"📅 Дата: {data['date']}\n"
             f"⏰ Время: {data['time']}\n"
-            f"⏱ Часов: {hours}",
+            f"⏱ Часов: {data['hours']}",
             parse_mode="Markdown"
         )
     else:
-        await message.answer("❌ Ошибка при создании брони. Попробуйте позже.",
-                             reply_markup=get_main_keyboard())
+        await callback.message.answer(
+            "❌ *Ошибка при создании брони*\n"
+            "Пожалуйста, попробуйте позже.",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard()
+        )
+    
     await state.clear()
+    await callback.answer()
 
-# ----- Обработчик инлайн-кнопки -----
-@dp.callback_query(lambda c: c.data == "choose_date")
-async def choose_date_callback(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Введите новую дату (например, 20.04):")
-    await state.set_state(BookingState.date)
+@dp.callback_query(lambda c: c.data == "cancel_booking")
+async def cancel_booking_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "❌ *Бронирование отменено*\n"
+        "Вы можете начать заново с помощью кнопки 'Забронировать'.",
+        parse_mode="Markdown",
+        reply_markup=get_main_keyboard()
+    )
+    await state.clear()
     await callback.answer()
 
 # ----- Запуск -----
