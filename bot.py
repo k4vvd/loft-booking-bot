@@ -129,7 +129,7 @@ async def start(message: types.Message, state: FSMContext):
 async def start_booking(message: types.Message, state: FSMContext):
     await message.answer(
         "Введите ваше имя:\n"
-        "*(минимум 2 символа, только буквы, пробелы и дефисы)*",
+        "* *",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
@@ -243,8 +243,7 @@ async def process_time(message: types.Message, state: FSMContext):
         return
     await state.update_data(time=time_str)
     await message.answer(
-        "Введите *количество часов* на которое хотите забронировать лофт:\n"
-        "Только число",
+        "Введите *количество часов* на которое хотите забронировать лофт:\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.hours)
