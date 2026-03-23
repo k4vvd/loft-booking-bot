@@ -170,8 +170,7 @@ async def process_name(message: types.Message, state: FSMContext):
         return
     await state.update_data(name=name)
     await message.answer(
-        "Введите ваш *телефон* (российский номер):\n"
-        "Примеры: +7 999 123-45-67, 89991234567, +79991234567",
+        "Введите ваш *телефон*\n"
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.phone)
@@ -183,7 +182,6 @@ async def process_phone(message: types.Message, state: FSMContext):
         await message.answer(
             "❌ *Некорректный номер телефона*\n"
             "Пожалуйста, введите российский номер телефона "
-            "(11 цифр, начинается с 7 или 8).\n\n"
             "Примеры: +7 999 123-45-67, 89991234567, +79991234567",
             parse_mode="Markdown"
         )
@@ -191,7 +189,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     formatted_phone = format_phone(phone)
     await state.update_data(phone=formatted_phone)
     await message.answer(
-        "Введите *дату* (например, 25.12):\n"
+        "Введите *дату*\n"
         "Формат: ДД.ММ",
         parse_mode="Markdown"
     )
@@ -226,8 +224,7 @@ async def process_date(message: types.Message, state: FSMContext):
         return
     await state.update_data(date=date_str)
     await message.answer(
-        "Введите *время* (например, 18:00):\n"
-        "Формат: ЧЧ:ММ (от 00:00 до 23:59)",
+        "Введите *время* начала вашего бронирования:\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.time)
@@ -246,7 +243,7 @@ async def process_time(message: types.Message, state: FSMContext):
         return
     await state.update_data(time=time_str)
     await message.answer(
-        "Введите *количество часов* (от 1 до 12):\n"
+        "Введите *количество часов* на которое хотите забронировать лофт:\n"
         "Только число",
         parse_mode="Markdown"
     )
