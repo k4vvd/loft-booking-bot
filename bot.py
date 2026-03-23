@@ -29,23 +29,16 @@ def validate_name(name: str) -> bool:
     """Проверка имени: минимум 2 символа, только буквы, пробелы и дефисы"""
     if len(name) < 2:
         return False
-    # Разрешаем буквы (русские и английские), пробелы, дефисы
     pattern = r'^[a-zA-Zа-яА-ЯёЁ\s\-]+$'
     return bool(re.match(pattern, name.strip()))
 
 def validate_phone(phone: str) -> bool:
     """Проверка российского номера телефона"""
-    # Удаляем все нецифровые символы
     digits = re.sub(r'\D', '', phone)
-    
-    # Проверяем длину (должно быть 11 цифр для российского номера)
     if len(digits) != 11:
         return False
-    
-    # Проверяем, что номер начинается с 7 или 8
     if digits[0] not in ['7', '8']:
         return False
-    
     return True
 
 def format_phone(phone: str) -> str:
@@ -62,25 +55,19 @@ def validate_date(date_str: str) -> bool:
     pattern = r'^\d{2}\.\d{2}$'
     if not re.match(pattern, date_str):
         return False
-    
     try:
         day, month = map(int, date_str.split('.'))
-        # Проверяем, что день и месяц в допустимых пределах
         if month < 1 or month > 12:
             return False
         if day < 1 or day > 31:
             return False
-        
-        # Проверяем, что дата не в прошлом
+        # Проверка, что дата не в прошлом (необязательно строго)
         current_date = datetime.now()
         current_year = current_date.year
         input_date = datetime(current_year, month, day)
-        
-        # Если дата уже прошла в этом году, предлагаем следующий год
         if input_date.date() < current_date.date():
-            # Можно разрешить, но добавить предупреждение
-            return True
-            
+            # Можно разрешить, но предупредить
+            pass
         return True
     except ValueError:
         return False
@@ -90,7 +77,6 @@ def validate_time(time_str: str) -> bool:
     pattern = r'^\d{2}:\d{2}$'
     if not re.match(pattern, time_str):
         return False
-    
     try:
         hours, minutes = map(int, time_str.split(':'))
         if hours < 0 or hours > 23:
@@ -105,7 +91,7 @@ def validate_hours(hours_str: str) -> bool:
     """Проверка количества часов"""
     try:
         hours = int(hours_str)
-        if hours < 1 or hours > 12:  # Максимум 12 часов
+        if hours < 1 or hours > 12:
             return False
         return True
     except ValueError:
@@ -126,15 +112,6 @@ def get_date_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📅 Выбрать другую дату", callback_data="choose_date")]
-        ]
-    )
-    return keyboard
-
-def get_cancel_keyboard():
-    """Кнопка отмены бронирования"""
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отменить бронирование", callback_data="cancel_booking")]
         ]
     )
     return keyboard
@@ -160,7 +137,6 @@ async def start_booking(message: types.Message, state: FSMContext):
 
 @dp.message(lambda message: message.text == "📋 Мои брони")
 async def my_bookings(message: types.Message):
-    # Здесь можно реализовать вывод броней пользователя из БД
     await message.answer("Здесь будут ваши бронирования.")
 
 @dp.message(lambda message: message.text == "❓ Помощь")
@@ -183,7 +159,6 @@ async def help_message(message: types.Message):
 @dp.message(BookingState.name)
 async def process_name(message: types.Message, state: FSMContext):
     name = message.text.strip()
-    
     if not validate_name(name):
         await message.answer(
             "❌ *Некорректное имя*\n"
@@ -193,7 +168,6 @@ async def process_name(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
     await state.update_data(name=name)
     await message.answer(
         "Введите ваш *телефон* (российский номер):\n"
@@ -205,7 +179,6 @@ async def process_name(message: types.Message, state: FSMContext):
 @dp.message(BookingState.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
-    
     if not validate_phone(phone):
         await message.answer(
             "❌ *Некорректный номер телефона*\n"
@@ -215,11 +188,8 @@ async def process_phone(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
-    # Сохраняем отформатированный номер для красоты
     formatted_phone = format_phone(phone)
     await state.update_data(phone=formatted_phone)
-    
     await message.answer(
         "Введите *дату* (например, 25.12):\n"
         "Формат: ДД.ММ",
@@ -230,7 +200,6 @@ async def process_phone(message: types.Message, state: FSMContext):
 @dp.message(BookingState.date)
 async def process_date(message: types.Message, state: FSMContext):
     date_str = message.text.strip()
-    
     if not validate_date(date_str):
         await message.answer(
             "❌ *Некорректная дата*\n"
@@ -240,13 +209,11 @@ async def process_date(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
-    # Проверяем, не прошла ли дата
+    # Необязательная проверка на прошлую дату
     current_date = datetime.now()
     current_year = current_date.year
     day, month = map(int, date_str.split('.'))
     input_date = datetime(current_year, month, day)
-    
     if input_date.date() < current_date.date():
         await message.answer(
             "⚠️ *Внимание!*\n"
@@ -257,7 +224,6 @@ async def process_date(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
     await state.update_data(date=date_str)
     await message.answer(
         "Введите *время* (например, 18:00):\n"
@@ -269,7 +235,6 @@ async def process_date(message: types.Message, state: FSMContext):
 @dp.message(BookingState.time)
 async def process_time(message: types.Message, state: FSMContext):
     time_str = message.text.strip()
-    
     if not validate_time(time_str):
         await message.answer(
             "❌ *Некорректное время*\n"
@@ -279,7 +244,6 @@ async def process_time(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
     await state.update_data(time=time_str)
     await message.answer(
         "Введите *количество часов* (от 1 до 12):\n"
@@ -291,7 +255,6 @@ async def process_time(message: types.Message, state: FSMContext):
 @dp.message(BookingState.hours)
 async def process_hours(message: types.Message, state: FSMContext):
     hours_str = message.text.strip()
-    
     if not validate_hours(hours_str):
         await message.answer(
             "❌ *Некорректное количество часов*\n"
@@ -300,12 +263,10 @@ async def process_hours(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
         return
-    
     hours = int(hours_str)
     await state.update_data(hours=hours)
     data = await state.get_data()
-    
-    # Показываем пользователю предварительную информацию
+
     confirm_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -314,7 +275,7 @@ async def process_hours(message: types.Message, state: FSMContext):
             ]
         ]
     )
-    
+
     await message.answer(
         f"📋 *Проверьте данные бронирования:*\n\n"
         f"👤 Имя: {data['name']}\n"
@@ -339,9 +300,12 @@ async def choose_date_callback(callback: types.CallbackQuery, state: FSMContext)
 
 @dp.callback_query(lambda c: c.data == "confirm_booking")
 async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMContext):
+    # Убираем кнопки из сообщения
+    await callback.message.edit_reply_markup(reply_markup=None)
+
     data = await state.get_data()
-    
-    # Проверяем пересечение еще раз на случай, если пока пользователь подтверждал, время освободилось
+
+    # Проверка пересечения
     overlap = await check_overlap(data["date"], data["time"], data["hours"])
     if overlap:
         await callback.message.answer(
@@ -352,7 +316,8 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
         await state.set_state(BookingState.date)
         await callback.answer()
         return
-    
+
+    # Сохраняем бронь
     booking_id = await add_booking(
         callback.from_user.id,
         data["name"],
@@ -361,7 +326,7 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
         data["time"],
         data["hours"]
     )
-    
+
     if booking_id:
         await callback.message.answer(
             "✅ *Бронь успешно создана!*\n\n"
@@ -372,7 +337,6 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
-        
         await bot.send_message(
             ADMIN_ID,
             f"🔔 *Новая бронь!*\n"
@@ -391,12 +355,15 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
-    
+
     await state.clear()
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "cancel_booking")
 async def cancel_booking_callback(callback: types.CallbackQuery, state: FSMContext):
+    # Убираем кнопки из сообщения
+    await callback.message.edit_reply_markup(reply_markup=None)
+
     await callback.message.answer(
         "❌ *Бронирование отменено*\n"
         "Вы можете начать заново с помощью кнопки 'Забронировать'.",
