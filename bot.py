@@ -205,7 +205,7 @@ async def start(message: types.Message, state: FSMContext):
 async def start_booking(message: types.Message, state: FSMContext):
     await message.answer(
         "Введите ваше имя:\n"
-        "*(минимум 2 символа, только буквы, пробелы и дефисы)*",
+        "* *",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode="Markdown"
     )
@@ -221,13 +221,6 @@ async def help_message(message: types.Message):
         "📖 *Помощь по боту*\n\n"
         "📅 *Забронировать* - создать новую бронь\n"
         "📋 *Мои брони* - просмотр ваших броней\n\n"
-        "*Правила ввода:*\n"
-        "• Имя: только буквы, от 2 символов\n"
-        "• Телефон: российский номер (11 цифр)\n"
-        "• Дата: формат ДД.ММ (например, 25.12)\n"
-        "• Время: формат ЧЧ:ММ (например, 18:00)\n"
-        "• Часы: число от 1 до 12\n"
-        "• Гости: число от 1 до 100\n\n"
         "*Тарифы:*\n"
         "ПН-ЧТ: 08-14 – 1800 руб/ч, 14-00 – 3500 руб/ч, 00-08 – 5000 руб/ч\n"
         "ПТ-ВС: 08-14 – 4000 руб/ч, 14-00 – 5000 руб/ч, 00-08 – 6000 руб/ч\n"
@@ -253,8 +246,7 @@ async def process_name(message: types.Message, state: FSMContext):
         return
     await state.update_data(name=name)
     await message.answer(
-        "Введите ваш *телефон* (российский номер):\n"
-        "Примеры: +7 999 123-45-67, 89991234567, +79991234567",
+        "Введите ваш *телефон* (российский номер):\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.phone)
@@ -309,8 +301,7 @@ async def process_date(message: types.Message, state: FSMContext):
         return
     await state.update_data(date=date_str)
     await message.answer(
-        "Введите *время* начала (например, 18:00):\n"
-        "Формат: ЧЧ:ММ (от 00:00 до 23:59)",
+        "Введите *время* начала вашей брони:\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.time)
@@ -329,8 +320,7 @@ async def process_time(message: types.Message, state: FSMContext):
         return
     await state.update_data(time=time_str)
     await message.answer(
-        "Введите *количество часов* (от 1 до 12):\n"
-        "Только число",
+        "Введите *количество часов*, на которое хотите забронировать лофт:\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.hours)
@@ -350,8 +340,7 @@ async def process_hours(message: types.Message, state: FSMContext):
     await state.update_data(hours=hours)
     # Переходим к запросу количества гостей
     await message.answer(
-        "Введите *количество гостей* (от 1 до 100):\n"
-        "Только число",
+        "Введите *количество гостей* (от 1 до 40):\n",
         parse_mode="Markdown"
     )
     await state.set_state(BookingState.guests)
@@ -362,7 +351,7 @@ async def process_guests(message: types.Message, state: FSMContext):
     if not validate_guests(guests_str):
         await message.answer(
             "❌ *Некорректное количество гостей*\n"
-            "Пожалуйста, введите число от 1 до 100.\n\n"
+            "Пожалуйста, введите число от 1 до 40.\n\n"
             "Введите количество гостей еще раз:",
             parse_mode="Markdown"
         )
