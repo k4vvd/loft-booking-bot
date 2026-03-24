@@ -379,7 +379,7 @@ async def process_guests(message: types.Message, state: FSMContext):
         f"👥 Гостей: {guests}\n\n"
         f"💰 *Расчёт стоимости:*\n"
         f"• Аренда: {price_info['hourly_cost']} руб\n"
-        f"  (почасовая разбивка: \n {details_text})\n"
+        f"• Почасовая разбивка: \n {details_text})\n"
     )
     if price_info['extra_guests_fee'] > 0:
         confirm_text += f"• Доплата за гостей (>15): +{price_info['extra_guests_fee']} руб\n"
@@ -434,7 +434,7 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
     if overlap:
         await callback.message.answer(
             "❌ *Извините, выбранное время занято*\n"
-            "Пожалуйста, выберите другую дату или время.",
+            "Пожалуйста, напишите сюда другую дату, далее вы сможете проверить другое время.",
             parse_mode="Markdown"
         )
         await state.set_state(BookingState.date)
