@@ -379,7 +379,7 @@ async def process_guests(message: types.Message, state: FSMContext):
         f"👥 Гостей: {guests}\n\n"
         f"💰 *Расчёт стоимости:*\n"
         f"• Аренда: {price_info['hourly_cost']} руб\n"
-        f"  (почасовая разбивка: {details_text})\n"
+        f"  (почасовая разбивка: \n {details_text})\n"
     )
     if price_info['extra_guests_fee'] > 0:
         confirm_text += f"• Доплата за гостей (>15): +{price_info['extra_guests_fee']} руб\n"
