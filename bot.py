@@ -507,7 +507,6 @@ async def cancel_booking_callback(callback: types.CallbackQuery, state: FSMConte
     await state.clear()
     await callback.answer()
 
-# ----- Запуск -----
 async def main():
     await init_db()
     print("🤖 Бот запущен! Отправьте /start в Telegram")

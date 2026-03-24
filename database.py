@@ -1,7 +1,6 @@
 import asyncpg
 import os
 
-# Railway автоматически подставит DATABASE_URL
 DATABASE_URL = os.getenv("DATABASE_URL")
 db_pool = None
 
@@ -9,6 +8,7 @@ async def init_db():
     global db_pool
     db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
     async with db_pool.acquire() as conn:
+        # Создаём таблицу, если её нет (только базовые поля)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS bookings (
                 id SERIAL PRIMARY KEY,
@@ -22,11 +22,28 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # Индекс для быстрого поиска по дате
+        # Добавляем недостающие колонки (если их нет)
+        # guests
+        res = await conn.fetchrow("SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='guests'")
+        if not res:
+            await conn.execute("ALTER TABLE bookings ADD COLUMN guests INTEGER DEFAULT 0 NOT NULL")
+        # total_price
+        res = await conn.fetchrow("SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='total_price'")
+        if not res:
+            await conn.execute("ALTER TABLE bookings ADD COLUMN total_price INTEGER DEFAULT 0 NOT NULL")
+        # cleaning_fee
+        res = await conn.fetchrow("SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='cleaning_fee'")
+        if not res:
+            await conn.execute("ALTER TABLE bookings ADD COLUMN cleaning_fee INTEGER DEFAULT 0 NOT NULL")
+        # extra_guests_fee
+        res = await conn.fetchrow("SELECT column_name FROM information_schema.columns WHERE table_name='bookings' AND column_name='extra_guests_fee'")
+        if not res:
+            await conn.execute("ALTER TABLE bookings ADD COLUMN extra_guests_fee INTEGER DEFAULT 0 NOT NULL")
+
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)")
 
 def time_to_minutes(time_str):
-    h, m = map(int, time_str.split(":"))
+    h, m = map(int, time_str.split(':'))
     return h * 60 + m
 
 async def check_overlap(date: str, time: str, hours: int) -> bool:
@@ -41,13 +58,18 @@ async def check_overlap(date: str, time: str, hours: int) -> bool:
                 return True
     return False
 
-async def add_booking(user_id, name, phone, date, time, hours):
+async def add_booking(user_id, name, phone, date, time, hours, guests, total_price, cleaning_fee, extra_guests_fee):
     if await check_overlap(date, time, hours):
         return None
     async with db_pool.acquire() as conn:
         booking_id = await conn.fetchval(
-            "INSERT INTO bookings (user_id, name, phone, date, time, hours) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-            user_id, name, phone, date, time, hours
+            """
+            INSERT INTO bookings 
+                (user_id, name, phone, date, time, hours, guests, total_price, cleaning_fee, extra_guests_fee) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+            """,
+            user_id, name, phone, date, time, hours, guests, total_price, cleaning_fee, extra_guests_fee
         )
         return booking_id
 
