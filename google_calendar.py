@@ -13,7 +13,7 @@ creds_dict = json.loads(creds_json)
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
 # Замените на ID вашего календаря
-CALENDAR_ID = 'loft-calendar@pro-groove-491617-b0.iam.gserviceaccount.com'
+CALENDAR_ID = '929557887718818cf17502a6b8dc3e8be641f2f7c050d905c68de65ed762a274@group.calendar.google.com'
 
 def get_calendar_service():
     return build('calendar', 'v3', credentials=creds)
