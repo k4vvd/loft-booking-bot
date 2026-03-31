@@ -9,6 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.filters import Command
 from datetime import datetime, timedelta
 from google_calendar import get_calendar_service, create_event
+from database import init_db, add_booking, check_overlap, close_db, get_user_bookings
 
 from database import init_db, add_booking, check_overlap, close_db
 
@@ -215,8 +216,28 @@ async def start_booking(message: types.Message, state: FSMContext):
 
 @dp.message(lambda message: message.text == "📋 Мои брони")
 async def my_bookings(message: types.Message):
-    await message.answer("Здесь будут ваши бронирования.")
+    user_id = message.from_user.id
+    bookings = await get_user_bookings(user_id)
 
+    if not bookings:
+        await message.answer("📭 У вас пока нет бронирований.")
+        return
+
+    text = "📋 *Ваши бронирования:*\n\n"
+    for b in bookings:
+        # Статус можно сделать более читаемым
+        status_emoji = "✅" if b['status'] == 'new' else "⏳"
+        status_text = "Активна" if b['status'] == 'new' else b['status']
+        
+        text += (
+            f"🔹 *Бронь #{b['id']}* {status_emoji}\n"
+            f"📅 {b['date']} в {b['time']} ({b['hours']} ч)\n"
+            f"👥 {b['guests']} гостей, 💰 {b['total_price']} руб\n"
+            f"Статус: {status_text}\n\n"
+        )
+
+    await message.answer(text, parse_mode="Markdown")
+    
 @dp.message(lambda message: message.text == "❓ Помощь")
 async def help_message(message: types.Message):
     await message.answer(
