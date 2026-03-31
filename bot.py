@@ -428,6 +428,7 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
     data = await state.get_data()
     price_info = data.get('price_info')
     if not price_info:
+        # Если по какой-то причине нет price_info, пересчитаем
         price_info = calculate_price(data['date'], data['time'], data['hours'], data['guests'])
 
     # Проверка пересечения
@@ -457,6 +458,7 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
     )
 
     if booking_id:
+        # Ответ пользователю
         await callback.message.answer(
             f"✅ *Бронь успешно создана!*\n\n"
             f"📅 Дата: {data['date']}\n"
@@ -468,6 +470,7 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
+
         # Уведомление админу
         admin_message = (
             f"🔔 *Новая бронь!*\n"
@@ -518,85 +521,6 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
-
-    await state.clear()
-    await callback.answer()
-        return
-
-    # Сохраняем бронь
-    booking_id = await add_booking(
-        callback.from_user.id,
-        data["name"],
-        data["phone"],
-        data["date"],
-        data["time"],
-        data["hours"],
-        data["guests"],
-        price_info['total'],
-        price_info['cleaning_fee'],
-        price_info['extra_guests_fee']
-    )
-
-    if booking_id:
-        await callback.message.answer(
-            f"✅ *Бронь успешно создана!*\n\n"
-            f"📅 Дата: {data['date']}\n"
-            f"⏰ Время: {data['time']}\n"
-            f"⏱ Часов: {data['hours']}\n"
-            f"👥 Гостей: {data['guests']}\n"
-            f"💰 *Стоимость:* {price_info['total']} руб\n\n"
-            "Администратор уведомлён.",
-            parse_mode="Markdown",
-            reply_markup=get_main_keyboard()
-        )
-        # Уведомление админу
-        admin_message = (
-            f"🔔 *Новая бронь!*\n"
-            f"ID: `{booking_id}`\n"
-            f"👤 Имя: {data['name']}\n"
-            f"📞 Телефон: {data['phone']}\n"
-            f"📅 Дата: {data['date']}\n"
-            f"⏰ Время: {data['time']}\n"
-            f"⏱ Часов: {data['hours']}\n"
-            f"👥 Гостей: {data['guests']}\n"
-            f"💰 Аренда: {price_info['hourly_cost']} руб\n"
-            f"🧹 Уборка: {price_info['cleaning_fee']} руб\n"
-        )
-        if price_info['extra_guests_fee'] > 0:
-            admin_message += f"➕ Доплата за гостей: {price_info['extra_guests_fee']} руб\n"
-        admin_message += f"━━━━━━━━━━━━━━━━━━━\n*ИТОГО: {price_info['total']} руб*"
-        await bot.send_message(ADMIN_ID, admin_message, parse_mode="Markdown")
-    else:
-        await callback.message.answer(
-            "❌ *Ошибка при создании брони*\n"
-            "Пожалуйста, попробуйте позже.",
-            parse_mode="Markdown",
-            reply_markup=get_main_keyboard()
-        )
-         # ---- ДОБАВЛЯЕМ В GOOGLE CALENDAR ----
-        try:
-            # Преобразуем дату и время в объекты datetime
-            day, month = map(int, data['date'].split('.'))
-            hour, minute = map(int, data['time'].split(':'))
-            year = datetime.now().year
-            start_dt = datetime(year, month, day, hour, minute)
-            end_dt = start_dt + timedelta(hours=data['hours'])
-
-            event_summary = f"Бронь #{booking_id}"
-            event_description = (
-                f"Дата: {data['date']}\n"
-                f"Время: {data['time']}\n"
-                f"Часов: {data['hours']}\n"
-                f"Гостей: {data['guests']}\n"
-                f"Сумма: {price_info['total']} руб"
-            )
-
-            service = get_calendar_service()
-            create_event(service, event_summary, event_description, start_dt, end_dt)
-            print("✅ Событие добавлено в Google Calendar")
-        except Exception as e:
-            print(f"❌ Ошибка при добавлении в календарь: {e}")
-        # -------------------------------------
 
     await state.clear()
     await callback.answer()
