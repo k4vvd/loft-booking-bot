@@ -438,6 +438,16 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             "❌ *Извините, выбранное время занято*\n"
             "Пожалуйста, напишите сюда другую дату, далее вы сможете проверить другое время.",
             parse_mode="Markdown"
+
+            try:
+    print("DEBUG: Начинаем добавление в календарь")
+    # ... ваш код создания start_dt, end_dt, service, create_event
+    print("DEBUG: событие успешно создано")
+except Exception as e:
+    print(f"Ошибка при добавлении в календарь: {e}")
+    # можно также вывести traceback
+    import traceback
+    traceback.print_exc()
         )
         await state.set_state(BookingState.date)
         await callback.answer()
