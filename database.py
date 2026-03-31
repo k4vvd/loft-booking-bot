@@ -71,6 +71,21 @@ async def add_booking(user_id, name, phone, date, time, hours, guests, total_pri
             """,
             user_id, name, phone, date, time, hours, guests, total_price, cleaning_fee, extra_guests_fee
         )
+
+        async def get_user_bookings(user_id: int):
+    """Возвращает список броней пользователя, отсортированных по дате и времени"""
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, date, time, hours, guests, total_price, status
+            FROM bookings
+            WHERE user_id = $1
+            ORDER BY date, time
+            """,
+            user_id
+        )
+        
+        return rows
         return booking_id
 
 async def close_db():
