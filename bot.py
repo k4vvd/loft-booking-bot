@@ -7,6 +7,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
+from datetime import datetime, timedelta
+from google_calendar import get_calendar_service, create_event
 
 from database import init_db, add_booking, check_overlap, close_db
 
@@ -491,6 +493,30 @@ async def confirm_booking_callback(callback: types.CallbackQuery, state: FSMCont
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
+         # ---- ДОБАВЛЯЕМ В GOOGLE CALENDAR ----
+        try:
+            # Преобразуем дату и время в объекты datetime
+            day, month = map(int, data['date'].split('.'))
+            hour, minute = map(int, data['time'].split(':'))
+            year = datetime.now().year
+            start_dt = datetime(year, month, day, hour, minute)
+            end_dt = start_dt + timedelta(hours=data['hours'])
+
+            event_summary = f"Бронь #{booking_id}"
+            event_description = (
+                f"Дата: {data['date']}\n"
+                f"Время: {data['time']}\n"
+                f"Часов: {data['hours']}\n"
+                f"Гостей: {data['guests']}\n"
+                f"Сумма: {price_info['total']} руб"
+            )
+
+            service = get_calendar_service()
+            create_event(service, event_summary, event_description, start_dt, end_dt)
+            print("✅ Событие добавлено в Google Calendar")
+        except Exception as e:
+            print(f"❌ Ошибка при добавлении в календарь: {e}")
+        # -------------------------------------
 
     await state.clear()
     await callback.answer()
